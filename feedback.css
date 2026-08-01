@@ -1,0 +1,38 @@
+.generation-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: -10px 0 20px;
+  padding: 11px 13px;
+  border: 1px solid #f0d2a7;
+  border-left: 3px solid #e5a13b;
+  border-radius: 5px;
+  background: #fff5e8;
+}
+
+.generation-warning strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #9b6320;
+  font-size: 11px;
+}
+
+.generation-warning span {
+  display: block;
+  color: #9b7b53;
+  font-size: 9px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.generation-warning button {
+  flex-shrink: 0;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: #b77926;
+  color: #fff;
+  font-size: 10px;
+  cursor: pointer;
+}

@@ -34,6 +34,13 @@ function renderProposal(data){
   const root = $('proposalResult');
   const modeLabel=data.generationMode==='ai'?'AI 实时生成':'本地规则兜底';
   root.innerHTML = `<div class="proposal-toolbar"><span class="proposal-status">● ${modeLabel} · ${formatDate()}</span><div class="proposal-actions"><button class="tool-btn" id="copyBtn">□ 复制 Markdown</button><button class="tool-btn" id="downloadBtn">↓ 导出 .md</button><button class="tool-btn" id="feishuDocBtn">▤ 写入飞书文档</button></div></div><div class="proposal-body"><div class="proposal-kicker">FEISHU AI SOLUTION / 2026</div><h2>${data.clientName} · 飞书 AI 数字化转型方案</h2><div class="proposal-meta">${data.industry}  ·  ${data.scale}  ·  售前初版</div><div class="proposal-tabs"><button class="proposal-tab active" data-tab="diagnosis">01 痛点诊断</button><button class="proposal-tab" data-tab="solution">02 解决方案</button><button class="proposal-tab" data-tab="value">03 预期价值</button></div><div id="proposalPanel"></div><div class="iteration-box"><label>让方案更贴近客户 · 输入反馈即可迭代</label><div class="iteration-row"><input id="feedbackInput" placeholder="例如：补充区域经理的管理视角" /><button id="iterateBtn">迭代方案 →</button></div></div></div>`;
+  if(data.generationMode==='local'){
+    const warning=document.createElement('div'); warning.className='generation-warning';
+    const copy=document.createElement('div'); copy.innerHTML='<strong>DeepSeek 未参与本次生成</strong><span></span>';
+    copy.querySelector('span').textContent=data.generationError||'模型服务暂不可用，当前内容仅为本地规则分析。';
+    const retry=document.createElement('button'); retry.textContent='重试 AI'; retry.onclick=()=>runGeneration(data);
+    warning.append(copy,retry); root.querySelector('.proposal-meta').after(warning);
+  }
   $('copyBtn').onclick = () => { navigator.clipboard?.writeText(toMarkdown(data)); toast('Markdown 已复制'); };
   $('downloadBtn').onclick = () => downloadMarkdown(data);
   $('feishuDocBtn').onclick = () => { toast('已生成飞书文档草稿 · 接入 API 后可自动写入'); };
@@ -47,6 +54,8 @@ function splitPainPoints(text){
 }
 function diagnosePain(point){
   const rules = [
+    [/新客|客源|获客|引流|自媒体|营销|投放|曝光/, ['缺少稳定的内容获客机制、渠道来源标签和“内容—咨询—到店—成交”转化追踪，无法判断哪些动作真正带来新客', '获客增长与营销投入产出']],
+    [/成交|转化|到店/, ['潜客从咨询到到店、成交的关键状态没有统一记录，也缺少跟进节奏和转化复盘', '销售转化与客户增长']],
     [/预约|撞单|等位/, ['预约入口、服务时段与人员产能没有统一管理，也缺少自动确认和冲突校验', '客户体验与门店产能']],
     [/会员|客户档案|偏好/, ['缺少跨门店统一会员档案，消费记录、服务偏好和历史项目无法授权共享', '复购与服务连续性']],
     [/排班|提成|业绩/, ['排班、服务订单与提成规则彼此割裂，月底只能依靠人工核算', '员工信任与管理成本']],
@@ -63,7 +72,7 @@ function diagnosePain(point){
 function getScenario(data){
   if(data.aiScenario) return data.aiScenario;
   const text = `${data.industry} ${data.painPoints}`;
-  if (/美发|沙龙|头皮|发型师|染烫|理发/i.test(text)) return {
+  if (data.useLegacyTemplate && /美发|沙龙|头皮|发型师|染烫|理发/i.test(text)) return {
     kind: 'salon',
     rows: [
       ['微信手工登记预约，高峰期撞单，客户等位超 40 分钟', '预约入口、发型师档期与服务时长没有统一管理，缺少容量校验和自动确认', '客户体验与门店产能'],
@@ -82,7 +91,7 @@ function getScenario(data){
     phases: ['一期 1-2 周：选择 1 家门店上线预约、发型师档期与会员档案。', '二期 1 个月：覆盖 5 家门店，接入提成核算和库存预警。', '三期 3 个月：建立会员分层、自动召回与连锁经营看板。'],
     benefit: '以单店试点验证预约与会员数据闭环，再复制到 5 家门店；优先减少撞单、提成核算和紧急调货带来的直接损失。'
   };
-  if (/游戏|MMORPG|手游|美术外包|研发与发行/i.test(text)) return {
+  if (data.useLegacyTemplate && /游戏|MMORPG|手游|美术外包|研发与发行/i.test(text)) return {
     kind: 'game',
     rows: [
       ['策划案改了 5 版，程序仍按第 2 版开发', '需求没有统一版本源与变更确认机制，研发、策划、美术缺少同一条变更链路', '版本延期与返工'],
@@ -109,14 +118,18 @@ function getScenario(data){
   if(/会议|纪要|站会/.test(text)) suggested.push(['飞书妙记', '自动生成纪要并提取待办']);
   if(/审批|排班|调班|提成|调货/.test(text)) suggested.push(['飞书审批', '将关键确认与例外处理标准化']);
   if(/预约|日程|档期/.test(text)) suggested.push(['飞书日历', '统一人员档期和业务日程']);
+  const isMarketing=/新客|客源|获客|引流|自媒体|营销|投放|曝光|成交|转化/.test(text);
+  if(isMarketing) suggested.push(['飞书文档', '建立选题库、内容日历和可复用的营销素材模板']);
   suggested.push(['飞书智能伙伴', '分析异常、生成摘要和行动建议'], ['飞书群机器人', '自动通知状态变化与责任人']);
+  const flow=isMarketing?['沉淀目标客群与选题','智能伙伴生成内容草稿','记录发布渠道和线索来源','多维表格跟踪咨询到店','每周复盘新客转化']:['一线人员提交业务记录','多维表格关联客户与事项','规则自动流转','AI 分析异常','机器人触达责任人'];
+  const metrics=isMarketing?[[`每周 3-5 条`,'稳定内容发布目标'],['100%','新客来源可追踪'],['逐周提升','咨询到店转化率']]:[['↓ 60%','手工汇总与重复沟通'],['实时','关键状态可见性'],['100%','业务记录可追溯']];
   return {
     kind: 'adaptive', rows,
     products: suggested.slice(0,6),
-    flow: ['一线人员提交业务记录', '多维表格关联客户与事项', '规则自动流转', 'AI 分析异常', '机器人触达责任人'], metrics: [['↓ 60%', '手工汇总与重复沟通'], ['实时', '关键状态可见性'], ['100%', '业务记录可追溯']], values: rows.slice(0,3).map((r,i)=>[r[2], r[0], i===0?'统一入口与实时看板':'自动流转与责任人提醒', i===0?'减少重复录入和沟通':'降低遗漏与返工']), risk: `若继续沿用当前方式，“${points.slice(0,2).join('”“')}”等问题会随业务规模扩大而放大，人工协调成本和服务风险持续增加。`, conclusion: `客户当前的 ${rows.map(r=>r[2]).slice(0,3).join('、')} 问题，需要通过统一数据、流程自动化与智能提醒共同解决。`,
-    ai: '飞书智能伙伴基于统一业务数据生成每日摘要、识别异常并给出行动建议；群机器人将风险自动推送给对应责任人。',
+    flow, metrics, values: rows.slice(0,3).map((r,i)=>[r[2], r[0], isMarketing?'建立内容、渠道与新客转化台账':i===0?'统一入口与实时看板':'自动流转与责任人提醒', isMarketing?'形成可持续复盘的获客闭环':i===0?'减少重复录入和沟通':'降低遗漏与返工']), risk: `若继续沿用当前方式，“${points.slice(0,2).join('”“')}”等问题会随业务规模扩大而放大，人工协调成本和服务风险持续增加。`, conclusion: `客户当前的 ${rows.map(r=>r[2]).slice(0,3).join('、')} 问题，需要通过统一数据、流程自动化与智能提醒共同解决。`,
+    ai: isMarketing?'飞书智能伙伴根据目标客群生成选题、标题和内容初稿；多维表格汇总不同渠道的新客数量与到店转化，辅助每周调整内容方向。':'飞书智能伙伴基于统一业务数据生成每日摘要、识别异常并给出行动建议；群机器人将风险自动推送给对应责任人。',
     phases: ['一期 1-2 周：选择一个高频核心流程试点，建立统一数据台账。', '二期 1 个月：扩展到相关团队，接入审批、通知和知识沉淀。', '三期 3 个月：建立经营看板与 AI 分析，持续优化规则。'],
-    benefit: '以最影响客户体验或交付效率的流程切入，先验证量化价值，再逐步扩展到其他业务环节。'
+    benefit: isMarketing?'先建立“内容发布—线索来源—到店成交”的最小闭环，用连续 4 周数据识别有效渠道，再逐步放大新客增长。':'以最影响客户体验或交付效率的流程切入，先验证量化价值，再逐步扩展到其他业务环节。'
   };
 }
 function renderPanel(tab, data){

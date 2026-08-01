@@ -88,7 +88,8 @@ async function requestOpenAI(customer,useSearch){
 }
 function parseJson(text){
   const clean=String(text||'').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
-  const parsed=JSON.parse(clean);
+  const start=clean.indexOf('{'); const end=clean.lastIndexOf('}');
+  const parsed=JSON.parse(start>=0 && end>start ? clean.slice(start,end+1) : clean);
   for(const key of ['researchTrends','rows','products','flow','metrics','values','phases']) if(!Array.isArray(parsed[key])) throw new Error(`模型结果缺少数组字段：${key}`);
   for(const key of ['risk','conclusion','ai','benefit']) if(typeof parsed[key]!=='string') throw new Error(`模型结果缺少文本字段：${key}`);
   if(!Array.isArray(parsed.sources)) parsed.sources=[];
@@ -123,6 +124,10 @@ async function handleGenerate(req,res){
   } catch(error){
     console.error(error);
     const detail=[error.message,error.cause?.message,error.cause?.code].filter(Boolean).join(' · ');
+    try{
+      const logDir=path.join(__dirname,'logs'); fs.mkdirSync(logDir,{recursive:true});
+      fs.appendFileSync(path.join(logDir,'agent-errors.log'),`${new Date().toISOString()} ${detail}\n`,'utf8');
+    }catch{}
     send(res,500,{message:error.name==='AbortError'?'生成超时，请重试':detail});
   }
 }
