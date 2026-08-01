@@ -46,7 +46,8 @@ function loadEnv(file){
   }
 }
 function send(res,status,body,type='application/json; charset=utf-8'){
-  res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store'}); res.end(typeof body==='string'?body:JSON.stringify(body));
+  res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store'});
+  res.end(Buffer.isBuffer(body) || typeof body==='string' ? body : JSON.stringify(body));
 }
 function readBody(req){ return new Promise((resolve,reject)=>{ let raw=''; req.on('data',c=>{raw+=c;if(raw.length>1_000_000)reject(new Error('请求内容过大'));}); req.on('end',()=>{try{resolve(JSON.parse(raw||'{}'));}catch{reject(new Error('JSON 格式错误'));}}); req.on('error',reject); }); }
 function outputText(response){
