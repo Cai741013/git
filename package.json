@@ -1,0 +1,8 @@
+{
+  "name": "feishu-solution-agent",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "python -m http.server 4173"
+  }
+}

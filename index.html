@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101c30" />
+    <title>提案工坊 · 飞书 AI 解决方案</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-lockup">
+          <div class="brand-mark">F</div>
+          <div>
+            <div class="brand-name">提案工坊</div>
+            <div class="brand-sub">FEISHU SOLUTION AGENT</div>
+          </div>
+        </div>
+
+        <button class="new-proposal" id="newProposalBtn"><span class="icon">＋</span> 新建提案</button>
+
+        <nav class="side-nav" aria-label="主导航">
+          <div class="nav-label">工作台</div>
+          <button class="nav-item active" data-view="workspace"><span class="nav-icon">◈</span>方案工作台</button>
+          <button class="nav-item" data-view="history"><span class="nav-icon">◷</span>提案历史 <span class="nav-count" id="historyCount">0</span></button>
+          <button class="nav-item" data-view="prompts"><span class="nav-icon">⌘</span>Prompt 配置</button>
+          <div class="nav-label second">资源</div>
+          <button class="nav-item" data-view="products"><span class="nav-icon">▦</span>飞书产品库</button>
+        </nav>
+
+        <div class="sidebar-foot">
+          <div class="status-dot"></div>
+          <div><strong>Agent 在线</strong><span>模型与记忆已就绪</span></div>
+          <button class="more-btn" title="更多设置">•••</button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="breadcrumbs"><span>工作台</span><span class="crumb-sep">/</span><strong id="crumbTitle">新建提案</strong></div>
+          <div class="top-actions">
+            <div class="memory-indicator"><span class="memory-icon">◌</span><span id="memoryLabel">记忆 0 条</span></div>
+            <button class="icon-btn" title="通知">♢<i></i></button>
+            <div class="avatar">SC</div>
+          </div>
+        </header>
+
+        <section class="view workspace-view" id="workspaceView">
+          <div class="workspace-grid">
+            <section class="input-column">
+              <div class="eyebrow"><span class="eyebrow-line"></span>AI 售前工作流</div>
+              <h1>把客户痛点，<em>变成一份能成交的方案</em></h1>
+              <p class="lead">输入行业与业务场景，Agent 将完成调研、诊断、产品匹配，并生成一份可直接沟通的飞书 AI 解决方案。</p>
+
+              <form class="client-form" id="clientForm">
+                <div class="form-heading"><span>01</span><div><h2>客户画像</h2><p>告诉我这次要服务谁</p></div><span class="required-note">* 必填</span></div>
+                <label>客户名称 <span>*</span><input id="clientName" name="clientName" placeholder="例如：星火餐饮集团" value="星火餐饮集团" required /></label>
+                <div class="form-row">
+                  <label>所属行业 <span>*</span><select id="industry" name="industry"><option>连锁餐饮</option><option>零售连锁</option><option>制造业</option><option>教育培训</option><option>专业服务</option><option>医疗健康</option></select></label>
+                  <label>企业规模 <span>*</span><input id="scale" name="scale" value="50 家门店 / 1200 人" required /></label>
+                </div>
+                <label>客户自述痛点 <span>*</span><textarea id="painPoints" name="painPoints" rows="4" required>门店排班混乱，店长依赖 Excel 排班；总部和门店信息不同步，请假、调班经常漏通知，无法实时掌握人力情况。</textarea></label>
+                <div class="quick-tags"><span>快速填充：</span><button type="button" class="tag" data-pain="销售线索分散在各个群聊，跟进状态不透明，复盘时找不到完整记录。">线索管理</button><button type="button" class="tag" data-pain="门店排班混乱，店长依赖 Excel 排班；总部和门店信息不同步，请假、调班经常漏通知。">排班协同</button><button type="button" class="tag" data-pain="项目进度靠人工汇报，跨部门协作信息滞后，风险无法提前预警。">项目协作</button></div>
+                <div class="form-footer"><span class="privacy-note">◉ 客户信息仅保存在当前工作区</span><button class="primary-btn" type="submit"><span class="spark">✦</span>开始生成方案 <span class="arrow">→</span></button></div>
+              </form>
+
+              <div class="workflow-strip">
+                <div class="workflow-title">Agent 将自动完成</div>
+                <div class="workflow-steps"><div><b>01</b><span>行业调研</span><small>搜索趋势与案例</small></div><i>→</i><div><b>02</b><span>痛点诊断</span><small>定位业务根因</small></div><i>→</i><div><b>03</b><span>方案匹配</span><small>组合飞书产品</small></div><i>→</i><div><b>04</b><span>文档生成</span><small>输出 3 页提案</small></div></div>
+              </div>
+            </section>
+
+            <section class="result-column" id="resultColumn">
+              <div class="result-empty" id="resultEmpty"><div class="empty-orbit"><span>✦</span></div><h3>你的方案将在这里展开</h3><p>填写左侧客户信息<br />开始一次完整的售前推演</p><div class="empty-rule"></div><span class="empty-hint">预计生成时间 · 约 30 秒</span></div>
+              <div class="result-loading hidden" id="resultLoading"><div class="loading-top"><div><span class="live-badge"><i></i> AGENT WORKING</span><h3 id="loadingTitle">正在理解客户场景</h3></div><span class="loading-time">预计还需 <b id="loadingTime">28</b>s</span></div><div class="progress-track"><div id="progressBar"></div></div><div class="loading-steps"><div class="load-step active" data-step="research"><b>01</b><span>行业调研</span><small>检索行业趋势与数字化案例</small><i>进行中</i></div><div class="load-step" data-step="diagnosis"><b>02</b><span>痛点诊断</span><small>建立表面问题与根因映射</small><i>等待中</i></div><div class="load-step" data-step="matching"><b>03</b><span>方案匹配</span><small>从产品库组合解决方案</small><i>等待中</i></div><div class="load-step" data-step="document"><b>04</b><span>文档生成</span><small>整理为结构化提案文档</small><i>等待中</i></div></div><div class="source-list"><span>本次调研来源</span><div><em>行业公开报告</em><em>产品知识库</em><em>客户记忆</em></div></div></div>
+              <div class="proposal-result hidden" id="proposalResult"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view history-view hidden" id="historyView"><div class="view-header"><div><div class="eyebrow"><span class="eyebrow-line"></span>客户记忆</div><h1>提案历史</h1><p>每一次沟通，都会成为下一次提案的上下文。</p></div><button class="secondary-btn" id="clearHistoryBtn">清空记忆</button></div><div class="history-list" id="historyList"></div></section>
+        <section class="view prompts-view hidden" id="promptsView"><div class="view-header"><div><div class="eyebrow"><span class="eyebrow-line"></span>可配置工作流</div><h1>Prompt 配置</h1><p>每一步都可以替换为你的团队方法论。</p></div><button class="secondary-btn" id="resetPromptsBtn">恢复默认</button></div><div class="prompt-grid" id="promptGrid"></div></section>
+        <section class="view products-view hidden" id="productsView"><div class="view-header"><div><div class="eyebrow"><span class="eyebrow-line"></span>知识库</div><h1>飞书产品库</h1><p>已加载 9 个产品能力，匹配时会结合行业场景。</p></div><span class="library-badge">9 个能力模块</span></div><div class="product-grid" id="productGrid"></div></section>
+      </main>
+    </div>
+    <div class="toast" id="toast"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
