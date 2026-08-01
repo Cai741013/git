@@ -1,5 +1,37 @@
 # 腾讯云部署说明
 
+## 当前 Windows 实例
+
+服务器公网 IP：`129.204.181.166`
+
+在腾讯云实例页面点击“执行命令”，选择 PowerShell，并运行：
+
+```powershell
+Invoke-Expression (Invoke-WebRequest 'https://raw.githubusercontent.com/Cai741013/git/main/scripts/deploy-windows.ps1' -UseBasicParsing).Content
+```
+
+脚本会自动安装 Node.js、下载项目、开放 Windows 防火墙端口 `80`，并注册开机自动启动任务。
+
+完成后通过远程桌面登录服务器，用记事本打开：
+
+```text
+C:\feishu-agent\.env
+```
+
+填写真实的 `DEEPSEEK_API_KEY`，并把 `ACCESS_CODE` 改成你希望分享给使用者的口令。保存后，以管理员身份打开 PowerShell：
+
+```powershell
+Restart-ScheduledTask -TaskName 'FeishuProposalAgent'
+```
+
+还需要在腾讯云控制台的“防火墙”页面添加入站规则：协议 `TCP`、端口 `80`、来源 `0.0.0.0/0`。完成后访问：
+
+```text
+http://129.204.181.166
+```
+
+---
+
 ## 服务器要求
 
 - 腾讯云轻量应用服务器
