@@ -2,8 +2,12 @@
   "name": "feishu-solution-agent",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "node --env-file-if-exists=.env --use-env-proxy server.js",
+    "start": "node server.js",
     "check": "node --check app.js && node --check server.js"
   }
 }

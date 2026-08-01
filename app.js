@@ -126,8 +126,17 @@ async function runGeneration(data){
   const steps=[['research','正在调研行业趋势与业务场景',18],['diagnosis','正在逐条拆解业务根因',42],['matching','正在组合飞书产品能力',68],['document','正在整理结构化提案文档',88]];
   let step=0; updateGenerationStep(steps,step); clearInterval(timer); timer=setInterval(()=>{if(step<steps.length-1){step++;updateGenerationStep(steps,step);}},1800);
   try{
-    const response=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-    const result=await response.json();
+    let accessCode=sessionStorage.getItem('proposal_access_code')||'';
+    let response=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json','X-Access-Code':accessCode},body:JSON.stringify(data)});
+    let result=await response.json();
+    if(response.status===401 && result.code==='ACCESS_REQUIRED'){
+      accessCode=window.prompt('请输入提案工坊访问口令')||'';
+      if(!accessCode) throw new Error('未输入访问口令');
+      sessionStorage.setItem('proposal_access_code',accessCode);
+      response=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json','X-Access-Code':accessCode},body:JSON.stringify(data)});
+      result=await response.json();
+      if(response.status===401) sessionStorage.removeItem('proposal_access_code');
+    }
     if(!response.ok) throw Object.assign(new Error(result.message||'AI 生成失败'),{code:result.code});
     data.aiScenario=result.scenario; data.generationMode='ai'; data.model=result.model;
   } catch(error){

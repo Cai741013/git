@@ -10,6 +10,10 @@ const API_KEY = isDeepSeek ? (process.env.DEEPSEEK_API_KEY || '') : (process.env
 const MODEL = process.env.AI_MODEL || (isDeepSeek ? 'deepseek-chat' : (process.env.OPENAI_MODEL || 'gpt-5.6-terra'));
 const OPENAI_URL = `${(process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')}/responses`;
 const DEEPSEEK_URL = `${(process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, '')}/chat/completions`;
+const HOST = process.env.HOST || '127.0.0.1';
+const ACCESS_CODE = process.env.ACCESS_CODE || '';
+const RATE_LIMIT_PER_HOUR = Math.max(1, Number(process.env.RATE_LIMIT_PER_HOUR || 20));
+const requestBuckets = new Map();
 
 const productKnowledge = `
 - 飞书多维表格：轻量业务系统，支持自动化、关联数据、表单和数据看板
@@ -46,8 +50,15 @@ function loadEnv(file){
   }
 }
 function send(res,status,body,type='application/json; charset=utf-8'){
-  res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store'});
+  res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer'});
   res.end(Buffer.isBuffer(body) || typeof body==='string' ? body : JSON.stringify(body));
+}
+function clientIp(req){ return String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').split(',')[0].trim(); }
+function allowRequest(req){
+  const now=Date.now(); const ip=clientIp(req); const bucket=requestBuckets.get(ip);
+  if(!bucket || now-bucket.startedAt>=3_600_000){ requestBuckets.set(ip,{startedAt:now,count:1}); return true; }
+  if(bucket.count>=RATE_LIMIT_PER_HOUR) return false;
+  bucket.count++; return true;
 }
 function readBody(req){ return new Promise((resolve,reject)=>{ let raw=''; req.on('data',c=>{raw+=c;if(raw.length>1_000_000)reject(new Error('请求内容过大'));}); req.on('end',()=>{try{resolve(JSON.parse(raw||'{}'));}catch{reject(new Error('JSON 格式错误'));}}); req.on('error',reject); }); }
 function outputText(response){
@@ -102,6 +113,8 @@ async function callModel(customer){
   }
 }
 async function handleGenerate(req,res){
+  if(ACCESS_CODE && req.headers['x-access-code']!==ACCESS_CODE) return send(res,401,{code:'ACCESS_REQUIRED',message:'请输入访问口令'});
+  if(!allowRequest(req)) return send(res,429,{code:'RATE_LIMITED',message:'本小时生成次数已用完，请稍后再试'});
   if(!API_KEY || API_KEY.includes('your-key')) return send(res,503,{code:'CONFIG_MISSING',message:`尚未配置 ${isDeepSeek?'DEEPSEEK_API_KEY':'OPENAI_API_KEY'}`});
   try{
     const customer=await readBody(req);
@@ -122,9 +135,10 @@ function serveStatic(req,res){
   fs.readFile(file,(err,data)=>err?send(res,500,'Read error','text/plain; charset=utf-8'):send(res,200,data,types[ext]||'application/octet-stream'));
 }
 const server=http.createServer((req,res)=>{
-  if(req.method==='GET' && req.url.startsWith('/api/status')) return send(res,200,{configured:Boolean(API_KEY&&!API_KEY.includes('your-key')),model:MODEL,provider:PROVIDER});
+  if(req.method==='GET' && req.url.startsWith('/healthz')) return send(res,200,{status:'ok'});
+  if(req.method==='GET' && req.url.startsWith('/api/status')) return send(res,200,{configured:Boolean(API_KEY&&!API_KEY.includes('your-key')),model:MODEL,provider:PROVIDER,protected:Boolean(ACCESS_CODE)});
   if(req.method==='POST' && req.url.startsWith('/api/generate')) return handleGenerate(req,res);
   if(req.method==='GET') return serveStatic(req,res);
   send(res,405,{message:'Method not allowed'});
 });
-server.listen(PORT,'127.0.0.1',()=>console.log(`提案工坊已启动：http://localhost:${PORT}`));
+server.listen(PORT,HOST,()=>console.log(`提案工坊已启动：http://${HOST==='0.0.0.0'?'localhost':HOST}:${PORT}`));

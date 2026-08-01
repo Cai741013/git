@@ -1,0 +1,12 @@
+services:
+  proposal-agent:
+    build: .
+    container_name: feishu-proposal-agent
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 4173
+    ports:
+      - "80:4173"
