@@ -17,19 +17,63 @@ const $ = (id) => document.getElementById(id);
 const toast = (msg) => { const el = $('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 2200); };
 const formatDate = (d = new Date()) => new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(d);
 function updateMemoryUI(){ $('historyCount').textContent = memories.length; $('memoryLabel').textContent = `记忆 ${memories.length} 条`; }
+async function checkAgentStatus(){
+  try{ const response=await fetch('/api/status'); const status=await response.json(); $('agentStatus').textContent=status.configured?'AI 已配置':'AI 尚未配置'; $('agentDetail').textContent=status.configured?`${status.provider} · ${status.model}`:'当前使用本地兜底'; }
+  catch{ $('agentStatus').textContent='本地演示模式'; $('agentDetail').textContent='请使用 Node 服务启动'; }
+}
 
 function renderProposal(data){
   const root = $('proposalResult');
-  root.innerHTML = `<div class="proposal-toolbar"><span class="proposal-status">● 已完成 · 生成于 ${formatDate()}</span><div class="proposal-actions"><button class="tool-btn" id="copyBtn">□ 复制 Markdown</button><button class="tool-btn" id="downloadBtn">↓ 导出 .md</button><button class="tool-btn" id="feishuDocBtn">▤ 写入飞书文档</button></div></div><div class="proposal-body"><div class="proposal-kicker">FEISHU AI SOLUTION / 2026</div><h2>${data.clientName} · 飞书 AI 数字化转型方案</h2><div class="proposal-meta">${data.industry}  ·  ${data.scale}  ·  售前初版</div><div class="proposal-tabs"><button class="proposal-tab active" data-tab="diagnosis">01 痛点诊断</button><button class="proposal-tab" data-tab="solution">02 解决方案</button><button class="proposal-tab" data-tab="value">03 预期价值</button></div><div id="proposalPanel"></div><div class="iteration-box"><label>让方案更贴近客户 · 输入反馈即可迭代</label><div class="iteration-row"><input id="feedbackInput" placeholder="例如：补充区域经理的管理视角" /><button id="iterateBtn">迭代方案 →</button></div></div></div>`;
+  const modeLabel=data.generationMode==='ai'?'AI 实时生成':'本地规则兜底';
+  root.innerHTML = `<div class="proposal-toolbar"><span class="proposal-status">● ${modeLabel} · ${formatDate()}</span><div class="proposal-actions"><button class="tool-btn" id="copyBtn">□ 复制 Markdown</button><button class="tool-btn" id="downloadBtn">↓ 导出 .md</button><button class="tool-btn" id="feishuDocBtn">▤ 写入飞书文档</button></div></div><div class="proposal-body"><div class="proposal-kicker">FEISHU AI SOLUTION / 2026</div><h2>${data.clientName} · 飞书 AI 数字化转型方案</h2><div class="proposal-meta">${data.industry}  ·  ${data.scale}  ·  售前初版</div><div class="proposal-tabs"><button class="proposal-tab active" data-tab="diagnosis">01 痛点诊断</button><button class="proposal-tab" data-tab="solution">02 解决方案</button><button class="proposal-tab" data-tab="value">03 预期价值</button></div><div id="proposalPanel"></div><div class="iteration-box"><label>让方案更贴近客户 · 输入反馈即可迭代</label><div class="iteration-row"><input id="feedbackInput" placeholder="例如：补充区域经理的管理视角" /><button id="iterateBtn">迭代方案 →</button></div></div></div>`;
   $('copyBtn').onclick = () => { navigator.clipboard?.writeText(toMarkdown(data)); toast('Markdown 已复制'); };
   $('downloadBtn').onclick = () => downloadMarkdown(data);
   $('feishuDocBtn').onclick = () => { toast('已生成飞书文档草稿 · 接入 API 后可自动写入'); };
   root.querySelectorAll('.proposal-tab').forEach(btn => btn.onclick = () => { root.querySelectorAll('.proposal-tab').forEach(x=>x.classList.remove('active')); btn.classList.add('active'); renderPanel(btn.dataset.tab, data); });
-  $('iterateBtn').onclick = () => { const v = $('feedbackInput').value.trim(); if(!v) return toast('请先写下你的修改意见'); data.feedback = v; data.version = (data.version || 1) + 1; saveMemory(data); renderPanel('solution', data); $('feedbackInput').value=''; toast('已根据反馈更新方案'); };
+  $('iterateBtn').onclick = () => { const v = $('feedbackInput').value.trim(); if(!v) return toast('请先写下你的修改意见'); data.feedback = v; data.version = (data.version || 1) + 1; runGeneration(data); };
   renderPanel('diagnosis', data);
 }
+function splitPainPoints(text){
+  const numbered = text.split(/(?:^|\s*)\d+[.、．]\s*/).map(x=>x.trim().replace(/[；;]$/,'')).filter(Boolean);
+  return numbered.length > 1 ? numbered : text.split(/[；;\n]+/).map(x=>x.trim()).filter(Boolean);
+}
+function diagnosePain(point){
+  const rules = [
+    [/预约|撞单|等位/, ['预约入口、服务时段与人员产能没有统一管理，也缺少自动确认和冲突校验', '客户体验与门店产能']],
+    [/会员|客户档案|偏好/, ['缺少跨门店统一会员档案，消费记录、服务偏好和历史项目无法授权共享', '复购与服务连续性']],
+    [/排班|提成|业绩/, ['排班、服务订单与提成规则彼此割裂，月底只能依靠人工核算', '员工信任与管理成本']],
+    [/库存|缺货|调货/, ['服务项目与库存扣减没有联动，缺少安全库存和跨门店调拨预警', '成交率与库存周转']],
+    [/流失|召回|触达|复购/, ['没有按最近到店、消费频次和偏好建立客户标签及自动召回任务', '会员生命周期价值']],
+    [/版本|文档|策划案/, ['缺少唯一版本源和变更确认机制，团队无法确认当前生效内容', '返工与交付周期']],
+    [/外包|验收|返工/, ['需求、交付物和验收标准没有结构化留痕，反馈散落在即时沟通工具中', '外包质量与成本']],
+    [/会议|站会|纪要|待办/, ['会议结论没有自动沉淀为责任人明确、带截止时间的可追踪任务', '执行落地']],
+    [/项目|进度|延期|Excel/, ['进度数据依赖人工收集，缺少自动汇总、依赖关系和风险预警', '管理效率与延期风险']]
+  ];
+  const hit = rules.find(([pattern])=>pattern.test(point));
+  return hit ? hit[1] : ['该事项依赖个人记录和人工转发，缺少统一数据、责任人和状态闭环', '业务效率与可控性'];
+}
 function getScenario(data){
+  if(data.aiScenario) return data.aiScenario;
   const text = `${data.industry} ${data.painPoints}`;
+  if (/美发|沙龙|头皮|发型师|染烫|理发/i.test(text)) return {
+    kind: 'salon',
+    rows: [
+      ['微信手工登记预约，高峰期撞单，客户等位超 40 分钟', '预约入口、发型师档期与服务时长没有统一管理，缺少容量校验和自动确认', '客户体验与门店产能'],
+      ['3200 名会员信息分散在纸档和前台手机', '缺少跨 5 家门店共享且有权限控制的会员主档，历史项目与药水偏好无法随客流转', '复购与服务连续性'],
+      ['排班和业绩提成由店长月底手算 Excel', '排班、服务订单、业绩归属和提成规则相互割裂，没有统一计算底表', '员工信任与管理成本'],
+      ['染烫产品缺货后才临时调货，客户等待 2 小时', '服务项目与库存扣减未联动，缺少安全库存、批次和跨店调拨预警', '成交率与库存周转'],
+      ['客户离店后零触达，无法识别 3 个月未到店会员', '没有按最近消费时间、项目和偏好建立客户标签及自动召回流程', '客户流失与生命周期价值']
+    ],
+    products: [['飞书多维表格', '搭建预约、会员、业绩提成与库存四张关联业务表'], ['飞书日历', '同步发型师档期，按服务时长管理可预约时段'], ['飞书审批', '处理调班、提成调整与跨门店库存调拨'], ['飞书智能伙伴', '识别流失会员、生成召回话术和门店经营摘要'], ['飞书群机器人', '发送预约提醒、缺货预警和会员召回任务'], ['飞书知识库', '统一沉淀服务流程、染烫配方规范与会员服务标准']],
+    flow: ['客户提交预约', '自动匹配发型师档期', '到店服务并更新会员档案', '库存自动扣减', 'AI 识别流失并发起召回'],
+    metrics: [['40 → <10 分钟', '高峰期客户等位目标'], ['↓ 80%', '店长月底提成核算时间'], ['30/60/90 天', '会员自动召回周期']],
+    values: [['预约接待', '微信手工登记、撞单频发', '统一预约表与档期冲突校验', '客户平均等位目标降至 10 分钟内'], ['提成核算', '5 家门店月底手算 Excel', '订单与提成规则自动汇总', '核算时间预计减少 80%'], ['库存管理', '缺货后临时调货约 2 小时', '安全库存与跨店调拨预警', '紧急缺货次数目标减少 70%'], ['会员运营', '3 个月未到店客户不可识别', '按标签自动生成召回名单', '3200 名会员状态 100% 可追踪']],
+    risk: '若保持微信、纸档和 Excel 并行，门店扩张会进一步放大撞单、提成纠纷和库存缺货；会员资产仍留在个人手机中，持续流失却无法识别。',
+    conclusion: '本质问题是预约、会员、员工绩效和库存没有围绕一次客户服务形成统一数据链路。',
+    ai: '飞书智能伙伴每天识别 30/60/90 天未到店会员并生成个性化召回话术；多维表格 AI 字段汇总门店经营异常，群机器人自动通知店长。',
+    phases: ['一期 1-2 周：选择 1 家门店上线预约、发型师档期与会员档案。', '二期 1 个月：覆盖 5 家门店，接入提成核算和库存预警。', '三期 3 个月：建立会员分层、自动召回与连锁经营看板。'],
+    benefit: '以单店试点验证预约与会员数据闭环，再复制到 5 家门店；优先减少撞单、提成核算和紧急调货带来的直接损失。'
+  };
   if (/游戏|MMORPG|手游|美术外包|研发与发行/i.test(text)) return {
     kind: 'game',
     rows: [
@@ -44,24 +88,56 @@ function getScenario(data){
     metrics: [['↓ 2 天/周', '项目经理进度统计时间'], ['30% → 15%', '美术外包返工率目标'], ['100%', '版本信息可检索覆盖率']],
     values: [['进度统计', '每周手工制作 Excel 约 2 天', '项目数据自动汇总', '每月释放约 8 个工作日'], ['外包返工', '返工率约 30%', '结构化需求与验收清单', '返工率目标降至 15%'], ['版本协作', '日志分散在多个文档', '知识库统一版本入口', '运营获取信息从 T+1 到实时']],
     risk: '若继续依赖微信群和个人 Excel，版本返工与延期会在项目后期集中暴露，外包成本可能继续上升，运营无法及时准备版本发布。',
-    conclusion: '本质问题是研发需求、项目进度、外包验收与版本知识没有形成一条可追踪的协作链路。'
+    conclusion: '本质问题是研发需求、项目进度、外包验收与版本知识没有形成一条可追踪的协作链路。',
+    ai: '飞书智能伙伴自动生成项目周报与版本摘要；妙记提取站会待办；多维表格 AI 字段识别延期风险、需求冲突和验收缺项。',
+    phases: ['一期 1-2 周：建立统一需求与项目台账，选择 1 个在研项目试点。', '二期 1 个月：覆盖 3 个项目，接入外包需求、验收与知识库。', '三期 3 个月：接入版本发布数据，建立研发与运营协同看板。'],
+    benefit: '先以一个项目试点验证价值，再复制到全部在研项目，减少手工汇总、需求追问和外包返工带来的隐性成本。'
   };
+  const points = splitPainPoints(data.painPoints).slice(0,5);
+  const rows = points.map(point=>[point, ...diagnosePain(point)]);
+  const suggested = [['飞书多维表格', '把客户描述的业务事项转为统一数据台账和实时看板']];
+  if(/项目|进度|任务|延期/.test(text)) suggested.push(['飞书项目', '管理任务、里程碑、依赖关系与风险']);
+  if(/文档|知识|版本|资料/.test(text)) suggested.push(['飞书知识库', '统一文档版本、权限和检索入口']);
+  if(/会议|纪要|站会/.test(text)) suggested.push(['飞书妙记', '自动生成纪要并提取待办']);
+  if(/审批|排班|调班|提成|调货/.test(text)) suggested.push(['飞书审批', '将关键确认与例外处理标准化']);
+  if(/预约|日程|档期/.test(text)) suggested.push(['飞书日历', '统一人员档期和业务日程']);
+  suggested.push(['飞书智能伙伴', '分析异常、生成摘要和行动建议'], ['飞书群机器人', '自动通知状态变化与责任人']);
   return {
-    kind: 'generic', rows: [['信息分散', '缺少统一业务数据入口与责任人机制', '协作效率'], ['流程依赖人工', '状态更新、审批或汇总没有自动化', '管理成本'], ['风险发现滞后', '缺少实时看板、提醒与异常预警', '交付风险']],
-    products: [['飞书多维表格', '统一业务数据与状态看板'], ['飞书审批', '将关键流程标准化、自动流转'], ['飞书知识库', '沉淀制度、文档与历史经验'], ['飞书智能伙伴', '生成分析、摘要与行动建议'], ['飞书群机器人', '自动通知关键变化']],
-    flow: ['业务人员提交信息', '多维表格统一记录', '审批按规则流转', '智能伙伴分析异常', '机器人触达责任人'], metrics: [['↓ 60%', '重复沟通时间'], ['实时', '关键状态可见性'], ['100%', '流程记录可追溯']], values: [['信息同步', '人工转发、状态滞后', '统一看板实时更新', '每月节省沟通时间'], ['流程执行', '依赖个人经验', '审批与提醒自动化', '减少遗漏与返工'], ['管理决策', '周报汇总后才发现问题', '实时数据与 AI 分析', '提前识别风险']], risk: '若继续依赖人工汇总与分散沟通，问题会在交付后期集中暴露，管理成本和返工成本持续增加。', conclusion: '本质问题是信息没有进入统一、可追踪、可自动提醒的业务流程。'
+    kind: 'adaptive', rows,
+    products: suggested.slice(0,6),
+    flow: ['一线人员提交业务记录', '多维表格关联客户与事项', '规则自动流转', 'AI 分析异常', '机器人触达责任人'], metrics: [['↓ 60%', '手工汇总与重复沟通'], ['实时', '关键状态可见性'], ['100%', '业务记录可追溯']], values: rows.slice(0,3).map((r,i)=>[r[2], r[0], i===0?'统一入口与实时看板':'自动流转与责任人提醒', i===0?'减少重复录入和沟通':'降低遗漏与返工']), risk: `若继续沿用当前方式，“${points.slice(0,2).join('”“')}”等问题会随业务规模扩大而放大，人工协调成本和服务风险持续增加。`, conclusion: `客户当前的 ${rows.map(r=>r[2]).slice(0,3).join('、')} 问题，需要通过统一数据、流程自动化与智能提醒共同解决。`,
+    ai: '飞书智能伙伴基于统一业务数据生成每日摘要、识别异常并给出行动建议；群机器人将风险自动推送给对应责任人。',
+    phases: ['一期 1-2 周：选择一个高频核心流程试点，建立统一数据台账。', '二期 1 个月：扩展到相关团队，接入审批、通知和知识沉淀。', '三期 3 个月：建立经营看板与 AI 分析，持续优化规则。'],
+    benefit: '以最影响客户体验或交付效率的流程切入，先验证量化价值，再逐步扩展到其他业务环节。'
   };
 }
 function renderPanel(tab, data){
   const panel = $('proposalPanel'); const s = getScenario(data);
   if(tab === 'diagnosis') panel.innerHTML = `<div class="proposal-section-title">表面问题 → 根因映射</div><table class="diagnosis-table"><thead><tr><th>客户描述</th><th>根因分析</th><th>影响范围</th></tr></thead><tbody>${s.rows.map((r,i)=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td><span class="pill ${i<2?'high':'mid'}">${i<2?'高影响':'重点关注'}</span></td></tr>`).join('')}</tbody></table><div class="proposal-section-title">6 个月风险预判</div><p class="proposal-lead">${s.risk}</p><div class="proposal-section-title">诊断结论</div><p class="proposal-lead">${s.conclusion}</p>`;
-  if(tab === 'solution') panel.innerHTML = `<div class="proposal-section-title">核心产品组合</div><div class="product-stack">${s.products.slice(0,6).map(p=>`<div class="product-card"><b>${p[0]}</b><span>${p[1]}</span></div>`).join('')}</div><div class="proposal-section-title">典型业务流程</div><div class="arch-flow">${s.flow.map((x,i)=>`${i?'<i class="arch-arrow">→</i>':''}<span class="arch-node">${x}</span>`).join('')}</div><p class="proposal-lead">AI 增强：飞书智能伙伴自动生成项目周报与版本摘要；妙记提取站会待办；多维表格 AI 字段识别延期风险、需求冲突和验收缺项。</p><div class="proposal-section-title">三期实施路径</div><p class="proposal-lead"><strong>一期 1-2 周</strong>：建立统一需求/项目台账，选择 1 个在研项目试点。<br /><strong>二期 1 个月</strong>：覆盖 3 个项目，接入外包需求、验收与知识库。<br /><strong>三期 3 个月</strong>：接入版本发布数据，建立研发与运营协同看板。</p>`;
-  if(tab === 'value') panel.innerHTML = `<div class="proposal-section-title">量化价值预估</div><div class="value-highlight">${s.metrics.map(m=>`<div class="metric"><strong>${m[0]}</strong><span>${m[1]}</span></div>`).join('')}</div><table class="value-table"><thead><tr><th>指标</th><th>当前状态</th><th>预期改善</th><th>量化价值</th></tr></thead><tbody>${s.values.map(v=>`<tr><td>${v[0]}</td><td>${v[1]}</td><td>${v[2]}</td><td>${v[3]}</td></tr>`).join('')}</tbody></table><div class="proposal-section-title">方案收益</div><p class="proposal-lead">先以一个项目试点验证价值，再复制到全部在研项目；预计首期即可减少手工汇总、需求追问和外包返工带来的隐性成本。</p>`;
+  if(tab === 'solution') panel.innerHTML = `<div class="proposal-section-title">核心产品组合</div><div class="product-stack">${s.products.slice(0,6).map(p=>`<div class="product-card"><b>${p[0]}</b><span>${p[1]}</span></div>`).join('')}</div><div class="proposal-section-title">典型业务流程</div><div class="arch-flow">${s.flow.map((x,i)=>`${i?'<i class="arch-arrow">→</i>':''}<span class="arch-node">${x}</span>`).join('')}</div><p class="proposal-lead">AI 增强：${s.ai}</p><div class="proposal-section-title">三期实施路径</div><p class="proposal-lead">${s.phases.map((p,i)=>`<strong>${['一期','二期','三期'][i]}</strong>：${p.replace(/^.*?：/,'')}`).join('<br />')}</p>`;
+  if(tab === 'value') panel.innerHTML = `<div class="proposal-section-title">量化价值预估</div><div class="value-highlight">${s.metrics.map(m=>`<div class="metric"><strong>${m[0]}</strong><span>${m[1]}</span></div>`).join('')}</div><table class="value-table"><thead><tr><th>指标</th><th>当前状态</th><th>预期改善</th><th>量化价值</th></tr></thead><tbody>${s.values.map(v=>`<tr><td>${v[0]}</td><td>${v[1]}</td><td>${v[2]}</td><td>${v[3]}</td></tr>`).join('')}</tbody></table><div class="proposal-section-title">方案收益</div><p class="proposal-lead">${s.benefit}</p>`;
 }
-function toMarkdown(d){ const s=getScenario(d); return `# ${d.clientName} 飞书 AI 数字化转型方案\n\n## 一、客户现状与痛点\n- 行业：${d.industry}\n- 规模：${d.scale}\n- 痛点：${d.painPoints}\n\n## 二、行业洞察\n- ${d.industry} 的核心协作挑战是信息分散、版本不可追踪和风险发现滞后。\n- 统一知识、项目与自动化通知，能够把跨团队协作从“人找信息”变成“信息找人”。\n\n## 三、解决方案设计\n${s.products.map(p=>`- ${p[0]}：${p[1]}`).join('\n')}\n\n业务流程：${s.flow.join(' → ')}\n\n## 四、预期价值与 ROI\n|指标|当前状态|预期改善|量化价值|\n|---|---|---|---|\n${s.values.map(v=>`|${v.join('|')}|`).join('\n')}\n\n## 五、实施保障\n- 一期 1-2 周试点，二期 1 个月覆盖核心团队，三期 3 个月完成数据看板与智能分析。\n\n## 六、下一步行动\n本周完成需求确认会，下周输出详细蓝图与试点项目清单。`; }
+function toMarkdown(d){ const s=getScenario(d); const trends=s.researchTrends?.length?s.researchTrends:[`${d.industry} 正在从分散记录转向统一业务数据与实时协同。`,'流程自动化与 AI 分析可以减少人工汇总并提前识别异常。','应从高频核心流程试点，再逐步扩展到完整业务链路。']; return `# ${d.clientName} 飞书 AI 数字化转型方案\n\n## 一、客户现状与痛点\n- 行业：${d.industry}\n- 规模：${d.scale}\n- 痛点：${d.painPoints}\n\n## 二、行业洞察\n${trends.map(x=>`- ${x}`).join('\n')}\n\n## 三、解决方案设计\n${s.products.map(p=>`- ${p[0]}：${p[1]}`).join('\n')}\n\n业务流程：${s.flow.join(' → ')}\n\nAI 增强：${s.ai}\n\n## 四、预期价值与 ROI\n|指标|当前状态|预期改善|量化价值|\n|---|---|---|---|\n${s.values.map(v=>`|${v.join('|')}|`).join('\n')}\n\n## 五、实施保障\n${s.phases.map(x=>`- ${x}`).join('\n')}\n\n## 六、下一步行动\n本周完成需求确认会，下周输出详细蓝图与试点项目清单。`; }
 function downloadMarkdown(d){ const blob = new Blob([toMarkdown(d)],{type:'text/markdown;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`${d.clientName}-飞书AI方案.md`; a.click(); URL.revokeObjectURL(a.href); toast('方案已导出'); }
 function saveMemory(data){ const i=memories.findIndex(x=>x.clientName===data.clientName); if(i>=0) memories[i]=data; else memories.unshift(data); memories=memories.slice(0,20); localStorage.setItem('feishu_memories',JSON.stringify(memories)); updateMemoryUI(); }
-function runGeneration(data){ $('resultEmpty').classList.add('hidden'); $('proposalResult').classList.add('hidden'); $('resultLoading').classList.remove('hidden'); let step=0; const steps=[['research','正在检索行业趋势与案例',24],['diagnosis','正在拆解业务根因',46],['matching','正在组合飞书产品能力',72],['document','正在整理 3 页提案文档',100]]; clearInterval(timer); timer=setInterval(()=>{ if(step>=steps.length){ clearInterval(timer); setTimeout(()=>{ $('resultLoading').classList.add('hidden'); $('proposalResult').classList.remove('hidden'); currentProposal=data; saveMemory(data); renderProposal(data); $('crumbTitle').textContent=data.clientName; toast('方案已生成，可继续迭代'); },450); return; } const [key,title,pct]=steps[step]; $('loadingTitle').textContent=title; $('progressBar').style.width=pct+'%'; document.querySelectorAll('.load-step').forEach(el=>{const active=el.dataset.step===key; const done=steps.findIndex(s=>s[0]===el.dataset.step)<step; el.classList.toggle('active',active); el.querySelector('i').textContent=done?'已完成':active?'进行中':'等待中';}); step++; },850); }
+function updateGenerationStep(steps,index){ const [key,title,pct]=steps[Math.min(index,steps.length-1)]; $('loadingTitle').textContent=title; $('progressBar').style.width=pct+'%'; document.querySelectorAll('.load-step').forEach(el=>{const pos=steps.findIndex(s=>s[0]===el.dataset.step); el.classList.toggle('active',pos===index); el.querySelector('i').textContent=pos<index?'已完成':pos===index?'进行中':'等待中';}); }
+async function runGeneration(data){
+  $('resultEmpty').classList.add('hidden'); $('proposalResult').classList.add('hidden'); $('resultLoading').classList.remove('hidden');
+  const steps=[['research','正在调研行业趋势与业务场景',18],['diagnosis','正在逐条拆解业务根因',42],['matching','正在组合飞书产品能力',68],['document','正在整理结构化提案文档',88]];
+  let step=0; updateGenerationStep(steps,step); clearInterval(timer); timer=setInterval(()=>{if(step<steps.length-1){step++;updateGenerationStep(steps,step);}},1800);
+  try{
+    const response=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    const result=await response.json();
+    if(!response.ok) throw Object.assign(new Error(result.message||'AI 生成失败'),{code:result.code});
+    data.aiScenario=result.scenario; data.generationMode='ai'; data.model=result.model;
+  } catch(error){
+    data.aiScenario=null; data.generationMode='local'; data.generationError=error.message;
+    toast(error.code==='CONFIG_MISSING'?'未配置 API 密钥，当前使用本地规则兜底':`AI 暂不可用，已使用本地兜底：${error.message}`);
+  } finally {
+    clearInterval(timer); $('progressBar').style.width='100%'; document.querySelectorAll('.load-step').forEach(el=>{el.classList.remove('active');el.querySelector('i').textContent='已完成';});
+    setTimeout(()=>{ $('resultLoading').classList.add('hidden'); $('proposalResult').classList.remove('hidden'); currentProposal=data; saveMemory(data); renderProposal(data); $('crumbTitle').textContent=data.clientName; if(data.generationMode==='ai')toast('AI 方案已生成，可继续迭代'); },350);
+  }
+}
 
 function renderHistory(){ const el=$('historyList'); if(!memories.length){el.innerHTML='<div class="result-empty" style="min-height:300px"><h3>还没有提案记忆</h3><p>生成第一份方案后，客户上下文会自动保存在这里。</p></div>';return;} el.innerHTML=memories.map((m,i)=>`<div class="history-card"><div><h3>${m.clientName} · ${m.industry}</h3><p>${m.scale}　${m.painPoints.slice(0,65)}${m.painPoints.length>65?'…':''}</p></div><div><span class="history-date">${m.savedAt || '刚刚保存'}</span><button class="tool-btn open-memory" data-index="${i}">打开</button></div></div>`).join(''); el.querySelectorAll('.open-memory').forEach(btn=>btn.onclick=()=>{ const m=memories[btn.dataset.index]; $('clientName').value=m.clientName; $('industry').value=m.industry; $('scale').value=m.scale; $('painPoints').value=m.painPoints; showView('workspace'); renderProposal(m); $('resultEmpty').classList.add('hidden'); $('proposalResult').classList.remove('hidden'); $('resultLoading').classList.add('hidden'); $('crumbTitle').textContent=m.clientName; }); }
 function renderPrompts(){ $('promptGrid').innerHTML=promptState.map(p=>`<article class="prompt-card"><header><b>${p.id}</b><strong>${p.title}</strong></header><textarea data-prompt="${p.id}">${p.text}</textarea><button class="save-prompt" data-save="${p.id}">保存修改</button></article>`).join(''); $('promptGrid').querySelectorAll('.save-prompt').forEach(btn=>btn.onclick=()=>{ const id=btn.dataset.save; const area=$(`promptGrid`).querySelector(`textarea[data-prompt="${id}"]`); promptState.find(p=>p.id===id).text=area.value; localStorage.setItem('feishu_prompts',JSON.stringify(promptState)); toast('Prompt 已保存'); }); }
@@ -74,4 +150,4 @@ document.querySelectorAll('.tag').forEach(btn=>btn.onclick=()=>{$('painPoints').
 $('clientForm').onsubmit=(e)=>{e.preventDefault(); const data={clientName:$('clientName').value.trim(),industry:$('industry').value,scale:$('scale').value.trim(),painPoints:$('painPoints').value.trim(),savedAt:formatDate(),version:1}; if(!data.clientName||!data.scale||!data.painPoints)return toast('请补全客户画像'); runGeneration(data);};
 $('clearHistoryBtn').onclick=()=>{if(!memories.length)return; memories=[]; localStorage.removeItem('feishu_memories'); updateMemoryUI(); renderHistory(); toast('记忆已清空');};
 $('resetPromptsBtn').onclick=()=>{promptState=defaultPrompts.map(p=>({...p})); localStorage.removeItem('feishu_prompts'); renderPrompts(); toast('Prompt 已恢复默认');};
-updateMemoryUI(); renderProducts();
+updateMemoryUI(); renderProducts(); checkAgentStatus();

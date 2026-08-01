@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "python -m http.server 4173"
+    "dev": "node --env-file-if-exists=.env --use-env-proxy server.js",
+    "check": "node --check app.js && node --check server.js"
   }
 }
