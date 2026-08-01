@@ -42,7 +42,12 @@ $content = [regex]::Replace($content, '(?m)^PORT=.*$', 'PORT=80')
 
 Write-Host '[4/5] Opening Windows Firewall port 80...'
 if (-not (Get-NetFirewallRule -DisplayName 'Feishu Proposal Agent HTTP' -ErrorAction SilentlyContinue)) {
-  New-NetFirewallRule -DisplayName 'Feishu Proposal Agent HTTP' -Direction Inbound -Protocol TCP -LocalPort 80 -Action Allow | Out-Null
+  try {
+    New-NetFirewallRule -DisplayName 'Feishu Proposal Agent HTTP' -Direction Inbound -Protocol TCP -LocalPort 80 -Action Allow -ErrorAction Stop | Out-Null
+  } catch {
+    Write-Warning 'PowerShell firewall cmdlet failed; trying netsh fallback.'
+    & netsh advfirewall firewall add rule name='Feishu Proposal Agent HTTP' dir=in action=allow protocol=TCP localport=80 | Out-Host
+  }
 }
 
 Write-Host '[5/5] Registering the startup task...'

@@ -30,6 +30,12 @@ Restart-ScheduledTask -TaskName 'FeishuProposalAgent'
 http://129.204.181.166
 ```
 
+如果 Windows 命令执行结果显示 `New-NetFirewallRule` 的 `1753` 错误，可在“执行命令”中单独运行：
+
+```powershell
+netsh advfirewall firewall add rule name="Feishu Proposal Agent HTTP" dir=in action=allow protocol=TCP localport=80
+```
+
 ---
 
 ## 服务器要求
