@@ -28,10 +28,11 @@ const productKnowledge = `
 
 const proposalSchema = {
   type: 'object', additionalProperties: false,
-  required: ['researchTrends','rows','products','flow','metrics','values','risk','conclusion','ai','phases','benefit','sources'],
+  required: ['researchTrends','rows','assumptions','products','flow','metrics','values','risk','conclusion','ai','phases','benefit','sources'],
   properties: {
     researchTrends: { type:'array', minItems:3, maxItems:3, items:{type:'string'} },
-    rows: { type:'array', minItems:3, maxItems:5, items:{ type:'array', minItems:3, maxItems:3, items:{type:'string'} } },
+    rows: { type:'array', minItems:1, maxItems:5, items:{ type:'array', minItems:3, maxItems:3, items:{type:'string'} } },
+    assumptions: { type:'array', maxItems:3, items:{type:'string'} },
     products: { type:'array', minItems:3, maxItems:6, items:{ type:'array', minItems:2, maxItems:2, items:{type:'string'} } },
     flow: { type:'array', minItems:4, maxItems:6, items:{type:'string'} },
     metrics: { type:'array', minItems:3, maxItems:3, items:{ type:'array', minItems:2, maxItems:2, items:{type:'string'} } },
@@ -66,8 +67,17 @@ function outputText(response){
   for(const item of response.output||[]) for(const content of item.content||[]) if(content.type==='output_text' && content.text) return content.text;
   return '';
 }
+function extractPainFacts(text){
+  const source=String(text||'').trim();
+  if(!source) return [];
+  let facts=source.split(/(?:^|[\s；;])\d+[.、．)]\s*/).map(x=>x.trim().replace(/[；;。]$/,'')).filter(Boolean);
+  if(facts.length<=1) facts=source.split(/[；;\n]+/).map(x=>x.trim().replace(/[。]$/,'')).filter(Boolean);
+  if(facts.length<=1) facts=source.split(/[，,]+/).map(x=>x.trim().replace(/[。]$/,'')).filter(x=>x.length>=4);
+  return [...new Set(facts)].slice(0,5);
+}
 function buildPrompt(customer){
-  return `角色：你是一位拥有5年企业数字化转型经验的飞书商业化售前顾问。\n\n目标：针对以下客户生成精准、可落地的飞书 AI 解决方案。\n客户名称：${customer.clientName}\n行业：${customer.industry}\n规模：${customer.scale}\n客户原始痛点：${customer.painPoints}\n${customer.feedback ? `本轮用户反馈：${customer.feedback}\n请在保留客户事实的前提下，按反馈优化方案。\n` : ''}\n飞书产品知识库：${productKnowledge}\n\n成功标准：\n1. 逐条引用并诊断客户原始痛点，禁止用“信息分散、流程人工”等空话替代客户场景。\n2. 每个根因具体到岗位、数据、流程或责任机制。\n3. 产品组合必须具体到上述飞书模块，明确如何操作、由谁使用。\n4. 数字必须基于客户输入或标注为“目标/预计”，不得编造已发生的客户数据。\n5. 给出三期实施路径：1-2周试点、1个月推广、3个月智能化。\n6. 如使用网络搜索，只引用可靠来源；找不到可靠数据时明确使用合理目标值，不伪造案例。\n7. 输出简体中文，短句、专业、有咨询感。\n\n只返回一个 JSON 对象，不要输出 Markdown 代码围栏或其他文字。字段必须为：researchTrends（三条字符串）、rows（三至五个[客户问题,根因,影响]）、products（三至六个[飞书产品,具体用法]）、flow（四至六步）、metrics（三个[目标值,指标名]）、values（三至五个[指标,当前状态,预期改善,量化价值]）、risk、conclusion、ai、phases（三期字符串）、benefit、sources（来源对象数组，无实时来源时返回空数组）。`;
+  const painFacts=extractPainFacts(customer.painPoints);
+  return `角色：你是一位拥有5年企业数字化转型经验的飞书商业化售前顾问。\n\n目标：针对以下客户生成精准、可落地的飞书 AI 解决方案。\n客户名称：${customer.clientName}\n行业：${customer.industry}\n规模：${customer.scale}\n客户原始痛点：${customer.painPoints}\n已拆分的客户事实（必须按此顺序逐条诊断，不得增加）：\n${painFacts.map((x,i)=>`${i+1}. ${x}`).join('\n')}\n${customer.feedback ? `本轮用户反馈：${customer.feedback}\n请在保留客户事实的前提下，按反馈优化方案。\n` : ''}\n飞书产品知识库：${productKnowledge}\n\n事实边界（必须严格遵守）：\n1. rows 只能包含上面的“客户事实”，数量和顺序必须完全一致；rows 第一列直接使用对应客户事实，不得新增“客户管理粗放”等客户未提及的问题。\n2. 根因是顾问诊断，不得写成已经证实的客户事实；信息不足时写“具体原因待需求访谈确认”。\n3. 可能有价值但客户未提供依据的判断，只能写入 assumptions，并明确为待确认假设；不得放入 rows、risk 或“当前状态”。没有则返回空数组。\n4. risk、conclusion 和 values 的“当前状态”只能引用客户输入；预测数字必须明确写“目标值”或“预计”，不得编造已发生数据。\n\n方案标准：\n1. 每个根因具体到岗位、数据、流程或责任机制，禁止用“信息分散、流程人工”等空话替代客户场景。\n2. 产品组合必须具体到上述飞书模块，明确如何操作、由谁使用。\n3. 数字必须基于客户输入或标注为“目标/预计”。\n4. 给出三期实施路径：1-2周试点、1个月推广、3个月智能化。\n5. 如使用网络搜索，只引用可靠来源；找不到可靠数据时明确使用合理目标值，不伪造案例。\n6. 输出简体中文，短句、专业、有咨询感。\n\n只返回一个 JSON 对象，不要输出 Markdown 代码围栏或其他文字。字段必须为：researchTrends（三条字符串）、rows（一至五个[客户事实,顾问根因诊断,影响范围]）、assumptions（零至三个待确认假设字符串）、products（三至六个[飞书产品,具体用法]）、flow（四至六步）、metrics（三个[目标值,指标名]）、values（三至五个[指标,当前状态,预期改善,量化价值]）、risk、conclusion、ai、phases（三期字符串）、benefit、sources（来源对象数组，无实时来源时返回空数组）。`;
 }
 async function requestOpenAI(customer,useSearch){
   const payload = {
@@ -93,7 +103,23 @@ function parseJson(text){
   for(const key of ['researchTrends','rows','products','flow','metrics','values','phases']) if(!Array.isArray(parsed[key])) throw new Error(`模型结果缺少数组字段：${key}`);
   for(const key of ['risk','conclusion','ai','benefit']) if(typeof parsed[key]!=='string') throw new Error(`模型结果缺少文本字段：${key}`);
   if(!Array.isArray(parsed.sources)) parsed.sources=[];
+  if(!Array.isArray(parsed.assumptions)) parsed.assumptions=[];
   return parsed;
+}
+function groundScenario(scenario,customer){
+  const facts=extractPainFacts(customer.painPoints);
+  const generatedRows=Array.isArray(scenario.rows)?scenario.rows:[];
+  const overflow=generatedRows.slice(facts.length)
+    .map(row=>Array.isArray(row)?`${row[0]}：${row[1]||'具体情况待确认'}`:'')
+    .filter(Boolean);
+  scenario.rows=facts.map((fact,index)=>{
+    const row=Array.isArray(generatedRows[index])?generatedRows[index]:[];
+    return [fact,row[1]||'具体原因待需求访谈确认',row[2]||'影响范围待确认'];
+  });
+  scenario.assumptions=[...(Array.isArray(scenario.assumptions)?scenario.assumptions:[]),...overflow]
+    .map(x=>String(x).replace(/^待确认(?:假设)?[：:]?\s*/,''))
+    .filter(Boolean).slice(0,3);
+  return scenario;
 }
 async function requestDeepSeek(customer){
   const controller=new AbortController(); const timeout=setTimeout(()=>controller.abort(),75_000);
@@ -120,7 +146,7 @@ async function handleGenerate(req,res){
   try{
     const customer=await readBody(req);
     for(const key of ['clientName','industry','scale','painPoints']) if(!String(customer[key]||'').trim()) return send(res,400,{message:`缺少字段：${key}`});
-    const scenario=await callModel(customer); send(res,200,{scenario,model:MODEL,provider:PROVIDER});
+    const scenario=groundScenario(await callModel(customer),customer); send(res,200,{scenario,model:MODEL,provider:PROVIDER});
   } catch(error){
     console.error(error);
     const detail=[error.message,error.cause?.message,error.cause?.code].filter(Boolean).join(' · ');
@@ -146,4 +172,6 @@ const server=http.createServer((req,res)=>{
   if(req.method==='GET') return serveStatic(req,res);
   send(res,405,{message:'Method not allowed'});
 });
-server.listen(PORT,HOST,()=>console.log(`提案工坊已启动：http://${HOST==='0.0.0.0'?'localhost':HOST}:${PORT}`));
+if(require.main===module) server.listen(PORT,HOST,()=>console.log(`提案工坊已启动：http://${HOST==='0.0.0.0'?'localhost':HOST}:${PORT}`));
+
+module.exports={extractPainFacts,groundScenario,buildPrompt};

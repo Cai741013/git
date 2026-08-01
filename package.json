@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env --use-env-proxy server.js",
     "start": "node server.js",
-    "check": "node --check app.js && node --check server.js"
+    "check": "node --check app.js && node --check server.js",
+    "test": "node --test server.test.js"
   }
 }
