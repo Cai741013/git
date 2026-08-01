@@ -17,6 +17,14 @@ const $ = (id) => document.getElementById(id);
 const toast = (msg) => { const el = $('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 2200); };
 const formatDate = (d = new Date()) => new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(d);
 function updateMemoryUI(){ $('historyCount').textContent = memories.length; $('memoryLabel').textContent = `记忆 ${memories.length} 条`; }
+function toggleCustomIndustry(){ const custom=$('industry').value==='__custom__'; $('customIndustry').classList.toggle('hidden',!custom); $('customIndustry').required=custom; if(custom) $('customIndustry').focus(); }
+function getIndustryValue(){ return $('industry').value==='__custom__' ? $('customIndustry').value.trim() : $('industry').value; }
+function setIndustryValue(value){
+  const exists=[...$('industry').options].some(option=>option.value===value);
+  $('industry').value=exists?value:'__custom__';
+  $('customIndustry').value=exists?'':value;
+  toggleCustomIndustry();
+}
 async function checkAgentStatus(){
   try{ const response=await fetch('/api/status'); const status=await response.json(); $('agentStatus').textContent=status.configured?'AI 已配置':'AI 尚未配置'; $('agentDetail').textContent=status.configured?`${status.provider} · ${status.model}`:'当前使用本地兜底'; }
   catch{ $('agentStatus').textContent='本地演示模式'; $('agentDetail').textContent='请使用 Node 服务启动'; }
@@ -148,15 +156,21 @@ async function runGeneration(data){
   }
 }
 
-function renderHistory(){ const el=$('historyList'); if(!memories.length){el.innerHTML='<div class="result-empty" style="min-height:300px"><h3>还没有提案记忆</h3><p>生成第一份方案后，客户上下文会自动保存在这里。</p></div>';return;} el.innerHTML=memories.map((m,i)=>`<div class="history-card"><div><h3>${m.clientName} · ${m.industry}</h3><p>${m.scale}　${m.painPoints.slice(0,65)}${m.painPoints.length>65?'…':''}</p></div><div><span class="history-date">${m.savedAt || '刚刚保存'}</span><button class="tool-btn open-memory" data-index="${i}">打开</button></div></div>`).join(''); el.querySelectorAll('.open-memory').forEach(btn=>btn.onclick=()=>{ const m=memories[btn.dataset.index]; $('clientName').value=m.clientName; $('industry').value=m.industry; $('scale').value=m.scale; $('painPoints').value=m.painPoints; showView('workspace'); renderProposal(m); $('resultEmpty').classList.add('hidden'); $('proposalResult').classList.remove('hidden'); $('resultLoading').classList.add('hidden'); $('crumbTitle').textContent=m.clientName; }); }
+function renderHistory(){
+  const el=$('historyList');
+  if(!memories.length){el.innerHTML='<div class="result-empty" style="min-height:300px"><h3>还没有提案记忆</h3><p>生成第一份方案后，客户上下文会自动保存在这里。</p></div>';return;}
+  el.innerHTML=memories.map((m,i)=>`<div class="history-card"><div><h3>${m.clientName} · ${m.industry}</h3><p>${m.scale}　${m.painPoints.slice(0,65)}${m.painPoints.length>65?'…':''}</p></div><div><span class="history-date">${m.savedAt || '刚刚保存'}</span><button class="tool-btn open-memory" data-index="${i}">打开</button></div></div>`).join('');
+  el.querySelectorAll('.open-memory').forEach(btn=>btn.onclick=()=>{ const m=memories[btn.dataset.index]; $('clientName').value=m.clientName; setIndustryValue(m.industry); $('scale').value=m.scale; $('painPoints').value=m.painPoints; showView('workspace'); renderProposal(m); $('resultEmpty').classList.add('hidden'); $('proposalResult').classList.remove('hidden'); $('resultLoading').classList.add('hidden'); $('crumbTitle').textContent=m.clientName; });
+}
 function renderPrompts(){ $('promptGrid').innerHTML=promptState.map(p=>`<article class="prompt-card"><header><b>${p.id}</b><strong>${p.title}</strong></header><textarea data-prompt="${p.id}">${p.text}</textarea><button class="save-prompt" data-save="${p.id}">保存修改</button></article>`).join(''); $('promptGrid').querySelectorAll('.save-prompt').forEach(btn=>btn.onclick=()=>{ const id=btn.dataset.save; const area=$(`promptGrid`).querySelector(`textarea[data-prompt="${id}"]`); promptState.find(p=>p.id===id).text=area.value; localStorage.setItem('feishu_prompts',JSON.stringify(promptState)); toast('Prompt 已保存'); }); }
 function renderProducts(){ $('productGrid').innerHTML=products.map(p=>`<article class="library-card"><div class="lib-icon">${p[2]}</div><h3>飞书${p[0]}</h3><p>${p[1]}</p></article>`).join(''); }
 function showView(view){ document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden')); $(`${view}View`).classList.remove('hidden'); document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===view)); if(view==='history')renderHistory(); if(view==='prompts')renderPrompts(); if(view==='products')renderProducts(); }
 
 document.querySelectorAll('.nav-item').forEach(btn=>btn.onclick=()=>showView(btn.dataset.view));
-$('newProposalBtn').onclick=()=>{showView('workspace'); $('resultEmpty').classList.remove('hidden'); $('proposalResult').classList.add('hidden'); $('resultLoading').classList.add('hidden'); $('crumbTitle').textContent='新建提案';};
+$('newProposalBtn').onclick=()=>{showView('workspace'); $('clientForm').reset(); $('customIndustry').value=''; toggleCustomIndustry(); $('resultEmpty').classList.remove('hidden'); $('proposalResult').classList.add('hidden'); $('resultLoading').classList.add('hidden'); $('crumbTitle').textContent='新建提案';};
+$('industry').onchange=toggleCustomIndustry;
 document.querySelectorAll('.tag').forEach(btn=>btn.onclick=()=>{$('painPoints').value=btn.dataset.pain;});
-$('clientForm').onsubmit=(e)=>{e.preventDefault(); const data={clientName:$('clientName').value.trim(),industry:$('industry').value,scale:$('scale').value.trim(),painPoints:$('painPoints').value.trim(),savedAt:formatDate(),version:1}; if(!data.clientName||!data.scale||!data.painPoints)return toast('请补全客户画像'); runGeneration(data);};
+$('clientForm').onsubmit=(e)=>{e.preventDefault(); const data={clientName:$('clientName').value.trim(),industry:getIndustryValue(),scale:$('scale').value.trim(),painPoints:$('painPoints').value.trim(),savedAt:formatDate(),version:1}; if(!data.clientName||!data.industry||!data.scale||!data.painPoints)return toast('请补全客户画像'); runGeneration(data);};
 $('clearHistoryBtn').onclick=()=>{if(!memories.length)return; memories=[]; localStorage.removeItem('feishu_memories'); updateMemoryUI(); renderHistory(); toast('记忆已清空');};
 $('resetPromptsBtn').onclick=()=>{promptState=defaultPrompts.map(p=>({...p})); localStorage.removeItem('feishu_prompts'); renderPrompts(); toast('Prompt 已恢复默认');};
 updateMemoryUI(); renderProducts(); checkAgentStatus();

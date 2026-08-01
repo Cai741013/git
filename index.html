@@ -55,12 +55,12 @@
 
               <form class="client-form" id="clientForm">
                 <div class="form-heading"><span>01</span><div><h2>客户画像</h2><p>告诉我这次要服务谁</p></div><span class="required-note">* 必填</span></div>
-                <label>客户名称 <span>*</span><input id="clientName" name="clientName" placeholder="例如：星火餐饮集团" value="星火餐饮集团" required /></label>
+                <label>客户名称 <span>*</span><input id="clientName" name="clientName" placeholder="例如：星火餐饮集团" required /></label>
                 <div class="form-row">
-                  <label>所属行业 <span>*</span><input id="industry" name="industry" list="industryOptions" value="连锁餐饮" required /><datalist id="industryOptions"><option value="连锁餐饮"></option><option value="零售连锁"></option><option value="制造业"></option><option value="教育培训"></option><option value="专业服务"></option><option value="医疗健康"></option><option value="游戏研发与发行"></option></datalist></label>
-                  <label>企业规模 <span>*</span><input id="scale" name="scale" value="50 家门店 / 1200 人" required /></label>
+                  <label>所属行业 <span>*</span><select id="industry" name="industry" required><option value="" selected disabled>请选择所属行业</option><option>连锁餐饮</option><option>美发美容与头皮养护</option><option>零售连锁</option><option>游戏研发与发行</option><option>互联网与软件</option><option>电子商务</option><option>制造业</option><option>汽车与零部件</option><option>建筑工程</option><option>房地产与物业</option><option>教育培训</option><option>医疗健康</option><option>生物医药</option><option>金融服务</option><option>专业服务</option><option>人力资源服务</option><option>物流运输</option><option>酒店与旅游</option><option>文化传媒</option><option>广告与营销</option><option>消费品</option><option>跨境电商</option><option>能源与环保</option><option>农业与食品</option><option>政务与公共服务</option><option value="__custom__">其他 / 自定义行业</option></select><input id="customIndustry" class="hidden" placeholder="例如：美发沙龙与头皮养护" /></label>
+                  <label>企业规模 <span>*</span><input id="scale" name="scale" placeholder="例如：50 家门店 / 1200 人" required /></label>
                 </div>
-                <label>客户自述痛点 <span>*</span><textarea id="painPoints" name="painPoints" rows="4" required>门店排班混乱，店长依赖 Excel 排班；总部和门店信息不同步，请假、调班经常漏通知，无法实时掌握人力情况。</textarea></label>
+                <label>客户自述痛点 <span>*</span><textarea id="painPoints" name="painPoints" rows="4" placeholder="例如：门店排班依赖 Excel，总部与门店信息不同步，请假、调班经常漏通知。" required></textarea></label>
                 <div class="quick-tags"><span>快速填充：</span><button type="button" class="tag" data-pain="销售线索分散在各个群聊，跟进状态不透明，复盘时找不到完整记录。">线索管理</button><button type="button" class="tag" data-pain="门店排班混乱，店长依赖 Excel 排班；总部和门店信息不同步，请假、调班经常漏通知。">排班协同</button><button type="button" class="tag" data-pain="项目进度靠人工汇报，跨部门协作信息滞后，风险无法提前预警。">项目协作</button></div>
                 <div class="form-footer"><span class="privacy-note">◉ 客户信息仅保存在当前工作区</span><button class="primary-btn" type="submit"><span class="spark">✦</span>开始生成方案 <span class="arrow">→</span></button></div>
               </form>
